@@ -3,7 +3,6 @@ package com.steve.ai.entity;
 import com.steve.ai.SteveMod;
 import com.steve.ai.config.SteveConfig;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.*;
@@ -90,7 +89,57 @@ public class SteveManager {
         return activeSteves.size();
     }
 
+    /**
+     * Регистрирует уже существующего Стива (например, загруженного из сохранения)
+     * в менеджере, чтобы он был виден в командах /steve list и /steve remove
+     */
+    public boolean registerExistingSteve(SteveEntity steve) {
+        if (steve == null || !steve.isAlive() || steve.isRemoved()) {
+            return false;
+        }
+        
+        String name = steve.getSteveName();
+        if (name == null || name.isEmpty()) {
+            name = "Steve_" + steve.getUUID().toString().substring(0, 8);
+            steve.setSteveName(name);
+            SteveMod.LOGGER.info("Assigned default name to unregistered Steve: {}", name);
+        }
+        
+        // Проверяем, не зарегистрирован ли уже Стив с таким именем
+        if (activeSteves.containsKey(name)) {
+            SteveEntity existing = activeSteves.get(name);
+            // Если это другой Стив (другой UUID), нужно переименовать нового
+            if (!existing.getUUID().equals(steve.getUUID())) {
+                name = name + "_" + steve.getUUID().toString().substring(0, 8);
+                steve.setSteveName(name);
+                SteveMod.LOGGER.warn("Renamed Steve to avoid name conflict: {}", name);
+            } else {
+                // Это тот же Стив, уже зарегистрирован
+                return false;
+            }
+        }
+        
+        // Проверяем, не зарегистрирован ли уже Стив с таким UUID
+        if (stevesByUUID.containsKey(steve.getUUID())) {
+            return false;
+        }
+        
+        activeSteves.put(name, steve);
+        stevesByUUID.put(steve.getUUID(), steve);
+        SteveMod.LOGGER.info("Registered existing Steve: {} with UUID {}", name, steve.getUUID());
+        return true;
+    }
+
     public void tick(ServerLevel level) {
+        // Регистрируем незарегистрированных Стивов в мире
+        for (var entity : level.getAllEntities()) {
+            if (entity instanceof SteveEntity steve) {
+                if (!stevesByUUID.containsKey(steve.getUUID())) {
+                    registerExistingSteve(steve);
+                }
+            }
+        }
+        
         // Clean up dead or removed Steves
         Iterator<Map.Entry<String, SteveEntity>> iterator = activeSteves.entrySet().iterator();
         while (iterator.hasNext()) {
