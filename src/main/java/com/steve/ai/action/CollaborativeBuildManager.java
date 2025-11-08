@@ -185,10 +185,12 @@ public class CollaborativeBuildManager {
     
     /**
      * Get the next block for a Steve to place (each Steve works on their own section)
-     * Returns null if Steve's section is complete
+     * Returns null if all sections are complete
      */
     public static BlockPlacement getNextBlock(CollaborativeBuild build, String steveName) {
         if (build.isComplete()) {
+            SteveMod.LOGGER.debug("Build '{}' is complete, no more blocks for Steve '{}'", 
+                build.structureId, steveName);
             return null;
         }
         
@@ -200,6 +202,8 @@ public class CollaborativeBuildManager {
             sectionIndex = assignSteveToSection(build, steveName);
             if (sectionIndex == null) {
                 // No sections available
+                SteveMod.LOGGER.warn("No incomplete sections available for Steve '{}' in build '{}' ({}% complete)", 
+                    steveName, build.structureId, build.getProgressPercentage());
                 return null;
             }
         }
@@ -207,11 +211,28 @@ public class CollaborativeBuildManager {
         BuildSection section = build.sections.get(sectionIndex);
         BlockPlacement block = section.getNextBlock();
         
+        // If current section is complete, try to assign Steve to another incomplete section
         if (block == null) {
+            SteveMod.LOGGER.info("Steve '{}' completed section '{}', switching to another section", 
+                steveName, section.sectionName);
+            
+            // Remove Steve from current section assignment
+            build.steveToSectionMap.remove(steveName);
+            
+            // Try to assign to another incomplete section
+            sectionIndex = assignSteveToSection(build, steveName);
             if (sectionIndex != null) {
                 section = build.sections.get(sectionIndex);
                 block = section.getNextBlock();
-                if (block != null) {                }
+                if (block != null) {
+                    SteveMod.LOGGER.info("Steve '{}' switched to section '{}', got next block", 
+                        steveName, section.sectionName);
+                } else {
+                    SteveMod.LOGGER.warn("Steve '{}' switched to section '{}' but got null block (section complete?)", 
+                        steveName, section.sectionName);
+                }
+            } else {
+                SteveMod.LOGGER.info("Steve '{}' - all sections complete or no sections available", steveName);
             }
         }
         
@@ -224,6 +245,15 @@ public class CollaborativeBuildManager {
      * Returns the section index, or null if all sections are complete
      */
     private static Integer assignSteveToSection(CollaborativeBuild build, String steveName) {
+        // Log section status for debugging
+        if (SteveMod.LOGGER.isDebugEnabled()) {
+            for (int i = 0; i < build.sections.size(); i++) {
+                BuildSection section = build.sections.get(i);
+                SteveMod.LOGGER.debug("Section {} ({}): {}/{} blocks placed, complete: {}", 
+                    i, section.sectionName, section.getBlocksPlaced(), section.getTotalBlocks(), section.isComplete());
+            }
+        }
+        
         // First pass: Find a section that isn't complete and isn't already assigned
         for (int i = 0; i < build.sections.size(); i++) {
             BuildSection section = build.sections.get(i);
@@ -232,8 +262,8 @@ public class CollaborativeBuildManager {
                 
                 if (!alreadyAssigned) {
                     build.steveToSectionMap.put(steveName, i);
-                    SteveMod.LOGGER.info("Assigned Steve '{}' to {} quadrant - will build {} blocks BOTTOM-TO-TOP", 
-                        steveName, section.sectionName, section.getTotalBlocks());
+                    SteveMod.LOGGER.info("Assigned Steve '{}' to {} quadrant - will build {} blocks ({} already placed) BOTTOM-TO-TOP", 
+                        steveName, section.sectionName, section.getTotalBlocks(), section.getBlocksPlaced());
                     return i;
                 }
             }
@@ -244,13 +274,16 @@ public class CollaborativeBuildManager {
             BuildSection section = build.sections.get(i);
             if (!section.isComplete()) {
                 build.steveToSectionMap.put(steveName, i);
-                SteveMod.LOGGER.info("Steve '{}' helping with {} quadrant ({} blocks remaining)", 
-                    steveName, section.sectionName, section.getTotalBlocks() - section.getBlocksPlaced());
+                int remaining = section.getTotalBlocks() - section.getBlocksPlaced();
+                SteveMod.LOGGER.info("Steve '{}' helping with {} quadrant ({} blocks remaining, {}/{} placed)", 
+                    steveName, section.sectionName, remaining, section.getBlocksPlaced(), section.getTotalBlocks());
                 return i;
             }
         }
         
         // All sections complete
+        SteveMod.LOGGER.info("All sections complete for build '{}'. Total: {}/{} blocks placed", 
+            build.structureId, build.getBlocksPlaced(), build.getTotalBlocks());
         return null;
     }
     

@@ -7,6 +7,7 @@ import com.steve.ai.action.Task;
 import com.steve.ai.entity.SteveEntity;
 import com.steve.ai.memory.StructureRegistry;
 import com.steve.ai.structure.StructureTemplateLoader;
+import com.steve.ai.structure.TextRenderer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.BlockParticleOption;
 import net.minecraft.core.particles.ParticleTypes;
@@ -90,6 +91,8 @@ public class BuildStructureAction extends BaseAction {
             buildMaterials.add(block != Blocks.AIR ? block : Blocks.OAK_PLANKS);
         }
         
+        SteveMod.LOGGER.info("Build materials: {} (count: {})", buildMaterials, buildMaterials.size());
+        
         Object dimensionsParam = task.getParameter("dimensions");
         int width = 9;  // Increased from 5
         int height = 6; // Increased from 4
@@ -150,14 +153,42 @@ public class BuildStructureAction extends BaseAction {
         BlockPos clearPos = groundPos;
         
         buildPlan = tryLoadFromTemplate(structureType, clearPos);
+        SteveMod.LOGGER.info("tryLoadFromTemplate returned: {} (null: {})", 
+            buildPlan != null ? buildPlan.size() + " blocks" : "null", buildPlan == null);
         
-        if (buildPlan == null) {
-            // Fall back to procedural generation            buildPlan = generateBuildPlan(structureType, clearPos, width, height, depth);
+        if (buildPlan == null || buildPlan.isEmpty()) {
+            // Special handling for text structures
+            if ("text".equals(structureType) || "sign".equals(structureType)) {
+                String text = task.getStringParameter("text", "HELLO");
+                String textColor = task.getStringParameter("textColor", "yellow");
+                String backgroundColor = task.getStringParameter("backgroundColor", "blue");
+                
+                Block textBlock = parseColoredWool(textColor);
+                Block backgroundBlock = parseColoredWool(backgroundColor);
+                
+                SteveMod.LOGGER.info("Building text sign: '{}' with text color: {}, background color: {}", 
+                    text, textColor, backgroundColor);
+                
+                buildPlan = buildText(text, clearPos, width, height, depth, textBlock, backgroundBlock);
+            } else {
+                // Fall back to procedural generation
+                SteveMod.LOGGER.info("NBT template not found or empty for '{}', using procedural generation", structureType);
+                buildPlan = generateBuildPlan(structureType, clearPos, width, height, depth);
+            }
+            
+            if (buildPlan != null && !buildPlan.isEmpty()) {
+                SteveMod.LOGGER.info("Generated procedural '{}' with {} blocks (dimensions: {}x{}x{})", 
+                    structureType, buildPlan.size(), width, height, depth);
+            } else {
+                SteveMod.LOGGER.error("Procedural generation returned null or empty for '{}'", structureType);
+            }
         } else {
             SteveMod.LOGGER.info("Loaded '{}' from NBT template with {} blocks", structureType, buildPlan.size());
         }
         
         if (buildPlan == null || buildPlan.isEmpty()) {
+            SteveMod.LOGGER.error("Cannot generate build plan for: {} (buildPlan is null: {}, empty: {})", 
+                structureType, buildPlan == null, buildPlan != null && buildPlan.isEmpty());
             result = ActionResult.failure("Cannot generate build plan for: " + structureType);
             return;
         }
@@ -206,19 +237,48 @@ public class BuildStructureAction extends BaseAction {
                 return;
             }
             
-            for (int i = 0; i < BLOCKS_PER_TICK; i++) {
+            int blocksPlacedThisTick = 0;
+            int maxAttempts = BLOCKS_PER_TICK * 10; // Try more times to find available blocks
+            int attempts = 0;
+            
+            while (blocksPlacedThisTick < BLOCKS_PER_TICK && attempts < maxAttempts) {
+                attempts++;
+                
                 CollaborativeBuildManager.BlockPlacement placement = 
                     CollaborativeBuildManager.getNextBlock(collaborativeBuild, steve.getSteveName());
                 
                 if (placement == null) {
-                    if (ticksRunning % 20 == 0) {
-                        SteveMod.LOGGER.info("Steve '{}' has no more blocks! Build {}% complete", 
-                            steve.getSteveName(), collaborativeBuild.getProgressPercentage());
+                    // Check if build is actually complete
+                    if (collaborativeBuild.isComplete()) {
+                        CollaborativeBuildManager.completeBuild(collaborativeBuild.structureId);
+                        steve.setFlying(false);
+                        result = ActionResult.success("Built " + structureType + " collaboratively!");
+                        SteveMod.LOGGER.info("Steve '{}' completed building {}! Total blocks: {}/{}", 
+                            steve.getSteveName(), structureType, 
+                            collaborativeBuild.getBlocksPlaced(), collaborativeBuild.getTotalBlocks());
+                        return;
                     }
-                    break;
+                    
+                    // Build not complete, but no blocks available right now
+                    // Try again next tick - don't break immediately
+                    if (attempts >= maxAttempts && ticksRunning % 20 == 0) {
+                        SteveMod.LOGGER.info("Steve '{}' waiting for available blocks. Build {}% complete ({}/{})", 
+                            steve.getSteveName(), collaborativeBuild.getProgressPercentage(),
+                            collaborativeBuild.getBlocksPlaced(), collaborativeBuild.getTotalBlocks());
+                    }
+                    break; // Exit loop, will try again next tick
                 }
                 
                 BlockPos pos = placement.pos;
+                
+                // Check if block is already placed correctly
+                BlockState existingState = steve.level().getBlockState(pos);
+                if (existingState.getBlock() == placement.block) {
+                    // Block already placed correctly, skip it and try next
+                    SteveMod.LOGGER.debug("Block at {} already placed correctly, skipping", pos);
+                    continue;
+                }
+                
                 double distance = Math.sqrt(steve.blockPosition().distSqr(pos));
                 if (distance > 5) {
                     steve.teleportTo(pos.getX() + 2, pos.getY(), pos.getZ() + 2);
@@ -229,10 +289,9 @@ public class BuildStructureAction extends BaseAction {
                 
                 steve.swing(InteractionHand.MAIN_HAND, true);
                 
-                BlockState existingState = steve.level().getBlockState(pos);
-                
                 BlockState blockState = placement.block.defaultBlockState();
                 steve.level().setBlock(pos, blockState, 3);
+                blocksPlacedThisTick++;
                 
                 SteveMod.LOGGER.info("Steve '{}' PLACED BLOCK at {} - Total: {}/{}", 
                     steve.getSteveName(), pos, collaborativeBuild.getBlocksPlaced(), 
@@ -279,20 +338,60 @@ public class BuildStructureAction extends BaseAction {
     }
 
     private List<BlockPlacement> generateBuildPlan(String type, BlockPos start, int width, int height, int depth) {
-        return switch (type.toLowerCase()) {
-            case "house", "home" -> buildAdvancedHouse(start, width, height, depth);
-            case "castle", "catle", "fort" -> buildCastle(start, width, height, depth);
-            case "tower" -> buildAdvancedTower(start, width, height);
-            case "wall" -> buildWall(start, width, height);
-            case "platform" -> buildPlatform(start, width, depth);
-            case "barn", "shed" -> buildBarn(start, width, height, depth);
-            case "modern", "modern_house" -> buildModernHouse(start, width, height, depth);
-            case "box", "cube" -> buildBox(start, width, height, depth);
+        SteveMod.LOGGER.info("Generating build plan for type: '{}', dimensions: {}x{}x{}, materials: {}", 
+            type, width, height, depth, buildMaterials);
+        
+        if (buildMaterials == null || buildMaterials.isEmpty()) {
+            SteveMod.LOGGER.error("Build materials are empty! Cannot generate build plan.");
+            return null;
+        }
+        
+        List<BlockPlacement> result = switch (type.toLowerCase()) {
+            case "house", "home" -> {
+                SteveMod.LOGGER.info("Building advanced house");
+                yield buildAdvancedHouse(start, width, height, depth);
+            }
+            case "castle", "catle", "fort" -> {
+                SteveMod.LOGGER.info("Building castle");
+                yield buildCastle(start, width, height, depth);
+            }
+            case "tower" -> {
+                SteveMod.LOGGER.info("Building tower");
+                yield buildAdvancedTower(start, width, height);
+            }
+            case "wall" -> {
+                SteveMod.LOGGER.info("Building wall");
+                yield buildWall(start, width, height);
+            }
+            case "platform" -> {
+                SteveMod.LOGGER.info("Building platform");
+                yield buildPlatform(start, width, depth);
+            }
+            case "barn", "shed" -> {
+                SteveMod.LOGGER.info("Building barn");
+                yield buildBarn(start, width, height, depth);
+            }
+            case "modern", "modern_house" -> {
+                SteveMod.LOGGER.info("Building modern house");
+                yield buildModernHouse(start, width, height, depth);
+            }
+            case "box", "cube" -> {
+                SteveMod.LOGGER.info("Building box");
+                yield buildBox(start, width, height, depth);
+            }
             default -> {
                 SteveMod.LOGGER.warn("Unknown structure type '{}', building advanced house", type);
                 yield buildAdvancedHouse(start, Math.max(5, width), Math.max(4, height), Math.max(5, depth));
             }
         };
+        
+        if (result != null) {
+            SteveMod.LOGGER.info("Generated {} blocks for structure type '{}'", result.size(), type);
+        } else {
+            SteveMod.LOGGER.error("Build plan generation returned null for type '{}'", type);
+        }
+        
+        return result;
     }
     
     private Block getMaterial(int index) {
@@ -681,6 +780,39 @@ public class BuildStructureAction extends BaseAction {
     }
     
     /**
+     * Parse color name to colored wool block
+     */
+    private Block parseColoredWool(String colorName) {
+        colorName = colorName.toLowerCase().trim();
+        String woolName = "minecraft:" + colorName + "_wool";
+        ResourceLocation resourceLocation = new ResourceLocation(woolName);
+        Block block = BuiltInRegistries.BLOCK.get(resourceLocation);
+        if (block != null && block != Blocks.AIR) {
+            return block;
+        }
+        // Fallback to yellow wool if color not found
+        SteveMod.LOGGER.warn("Color '{}' not found, using yellow_wool", colorName);
+        return Blocks.YELLOW_WOOL;
+    }
+    
+    /**
+     * Build text sign using TextRenderer
+     */
+    private List<BlockPlacement> buildText(String text, BlockPos start, int width, int height, int thickness, 
+                                           Block textBlock, Block backgroundBlock) {
+        List<TextRenderer.BlockPlacement> textBlocks = TextRenderer.renderText(
+            text, start, width, height, thickness, textBlock, backgroundBlock);
+        
+        // Convert TextRenderer.BlockPlacement to BuildStructureAction.BlockPlacement
+        List<BlockPlacement> result = new ArrayList<>();
+        for (TextRenderer.BlockPlacement tp : textBlocks) {
+            result.add(new BlockPlacement(tp.pos, tp.block));
+        }
+        
+        return result;
+    }
+    
+    /**
      * Find the actual ground level from a starting position
      * Scans downward to find solid ground, or upward if underground
      */
@@ -851,11 +983,19 @@ public class BuildStructureAction extends BaseAction {
      */
     private List<BlockPlacement> tryLoadFromTemplate(String structureName, BlockPos startPos) {
         if (!(steve.level() instanceof ServerLevel serverLevel)) {
+            SteveMod.LOGGER.debug("Level is not ServerLevel, cannot load template");
             return null;
         }
         
+        SteveMod.LOGGER.info("Attempting to load NBT template for '{}'", structureName);
         var template = StructureTemplateLoader.loadFromNBT(serverLevel, structureName);
         if (template == null) {
+            SteveMod.LOGGER.info("Template '{}' not found in NBT files", structureName);
+            return null;
+        }
+        
+        if (template.blocks == null || template.blocks.isEmpty()) {
+            SteveMod.LOGGER.warn("Template '{}' loaded but has no blocks", structureName);
             return null;
         }
         
@@ -866,6 +1006,7 @@ public class BuildStructureAction extends BaseAction {
             blocks.add(new BlockPlacement(worldPos, block));
         }
         
+        SteveMod.LOGGER.info("Successfully loaded template '{}' with {} blocks", structureName, blocks.size());
         return blocks;
     }
     
