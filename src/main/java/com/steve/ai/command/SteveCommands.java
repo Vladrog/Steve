@@ -4,6 +4,8 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.steve.ai.SteveMod;
+import com.steve.ai.ai.LMStudioClient;
+import com.steve.ai.config.SteveConfig;
 import com.steve.ai.entity.SteveEntity;
 import com.steve.ai.entity.SteveManager;
 import net.minecraft.commands.CommandSourceStack;
@@ -31,6 +33,8 @@ public class SteveCommands {
                 .then(Commands.argument("name", StringArgumentType.string())
                     .then(Commands.argument("command", StringArgumentType.greedyString())
                         .executes(SteveCommands::tellSteve))))
+            .then(Commands.literal("test-lmstudio")
+                .executes(SteveCommands::testLMStudio))
         );
     }
 
@@ -131,6 +135,49 @@ public class SteveCommands {
             source.sendFailure(Component.literal("Steve not found: " + name));
             return 0;
         }
+    }
+
+    private static int testLMStudio(CommandContext<CommandSourceStack> context) {
+        CommandSourceStack source = context.getSource();
+        
+        source.sendSuccess(() -> Component.literal("Тестирование подключения к LM Studio..."), false);
+        
+        new Thread(() -> {
+            try {
+                String apiUrl = SteveConfig.LMSTUDIO_API_URL.get();
+                String model = SteveConfig.LMSTUDIO_MODEL.get();
+                String provider = SteveConfig.AI_PROVIDER.get();
+                
+                source.sendSuccess(() -> Component.literal("Провайдер: " + provider), false);
+                source.sendSuccess(() -> Component.literal("URL: " + apiUrl), false);
+                source.sendSuccess(() -> Component.literal("Модель: " + (model.isEmpty() ? "(не указана)" : model)), false);
+                
+                if (!"lmstudio".equalsIgnoreCase(provider)) {
+                    source.sendFailure(Component.literal("Ошибка: Провайдер установлен на '" + provider + "', а не 'lmstudio'"));
+                    source.sendFailure(Component.literal("Измените [ai].provider на 'lmstudio' в config/steve-common.toml"));
+                    return;
+                }
+                
+                LMStudioClient client = new LMStudioClient();
+                String response = client.sendRequest(
+                    "You are a helpful assistant. Respond briefly.",
+                    "Say 'Hello from LM Studio'"
+                );
+                
+                if (response != null && !response.isEmpty()) {
+                    source.sendSuccess(() -> Component.literal("✓ Успешно! LM Studio отвечает."), true);
+                    source.sendSuccess(() -> Component.literal("Ответ: " + response.substring(0, Math.min(100, response.length()))), false);
+                } else {
+                    source.sendFailure(Component.literal("✗ Ошибка: LM Studio не ответил"));
+                    source.sendFailure(Component.literal("Проверьте логи игры для подробностей"));
+                }
+            } catch (Exception e) {
+                source.sendFailure(Component.literal("✗ Ошибка: " + e.getMessage()));
+                SteveMod.LOGGER.error("Ошибка при тестировании LM Studio", e);
+            }
+        }).start();
+        
+        return 1;
     }
 }
 

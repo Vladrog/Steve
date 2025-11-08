@@ -12,11 +12,13 @@ public class TaskPlanner {
     private final OpenAIClient openAIClient;
     private final GeminiClient geminiClient;
     private final GroqClient groqClient;
+    private final LMStudioClient lmStudioClient;
 
     public TaskPlanner() {
         this.openAIClient = new OpenAIClient();
         this.geminiClient = new GeminiClient();
         this.groqClient = new GroqClient();
+        this.lmStudioClient = new LMStudioClient();
     }
 
     public ResponseParser.ParsedResponse planTasks(SteveEntity steve, String command) {
@@ -51,17 +53,31 @@ public class TaskPlanner {
     }
 
     private String getAIResponse(String provider, String systemPrompt, String userPrompt) {
+        SteveMod.LOGGER.info("getAIResponse called with provider: '{}'", provider);
         String response = switch (provider) {
-            case "groq" -> groqClient.sendRequest(systemPrompt, userPrompt);
-            case "gemini" -> geminiClient.sendRequest(systemPrompt, userPrompt);
-            case "openai" -> openAIClient.sendRequest(systemPrompt, userPrompt);
+            case "groq" -> {
+                SteveMod.LOGGER.info("Using Groq client");
+                yield groqClient.sendRequest(systemPrompt, userPrompt);
+            }
+            case "gemini" -> {
+                SteveMod.LOGGER.info("Using Gemini client");
+                yield geminiClient.sendRequest(systemPrompt, userPrompt);
+            }
+            case "openai" -> {
+                SteveMod.LOGGER.info("Using OpenAI client");
+                yield openAIClient.sendRequest(systemPrompt, userPrompt);
+            }
+            case "lmstudio" -> {
+                SteveMod.LOGGER.info("Using LM Studio client");
+                yield lmStudioClient.sendRequest(systemPrompt, userPrompt);
+            }
             default -> {
                 SteveMod.LOGGER.warn("Unknown AI provider '{}', using Groq", provider);
                 yield groqClient.sendRequest(systemPrompt, userPrompt);
             }
         };
         
-        if (response == null && !provider.equals("groq")) {
+        if (response == null && !provider.equals("groq") && !provider.equals("lmstudio")) {
             SteveMod.LOGGER.warn("{} failed, trying Groq as fallback", provider);
             response = groqClient.sendRequest(systemPrompt, userPrompt);
         }

@@ -55,6 +55,38 @@ public class ResponseParser {
     private static String extractJSON(String response) {
         String cleaned = response.trim();
         
+        // Удаляем <think> блоки (LM Studio может добавлять их)
+        cleaned = cleaned.replaceAll("(?s)<think>.*?</think>", "");
+        cleaned = cleaned.replaceAll("(?s)<think>.*?</think>", "");
+        cleaned = cleaned.replaceAll("(?s)<reasoning>.*?</reasoning>", "");
+        
+        // Ищем JSON объект в тексте (может быть обернут в markdown или текст)
+        int jsonStart = cleaned.indexOf("{");
+        if (jsonStart != -1) {
+            // Находим начало JSON
+            cleaned = cleaned.substring(jsonStart);
+            
+            // Находим конец JSON (последняя закрывающая скобка)
+            int depth = 0;
+            int jsonEnd = -1;
+            for (int i = 0; i < cleaned.length(); i++) {
+                char c = cleaned.charAt(i);
+                if (c == '{') depth++;
+                if (c == '}') {
+                    depth--;
+                    if (depth == 0) {
+                        jsonEnd = i + 1;
+                        break;
+                    }
+                }
+            }
+            
+            if (jsonEnd != -1) {
+                cleaned = cleaned.substring(0, jsonEnd);
+            }
+        }
+        
+        // Удаляем markdown code blocks
         if (cleaned.startsWith("```json")) {
             cleaned = cleaned.substring(7);
         } else if (cleaned.startsWith("```")) {
@@ -66,6 +98,12 @@ public class ResponseParser {
         }
         
         cleaned = cleaned.trim();
+        
+        // Удаляем весь текст до первой открывающей скобки JSON
+        int firstBrace = cleaned.indexOf("{");
+        if (firstBrace > 0) {
+            cleaned = cleaned.substring(firstBrace);
+        }
         
         // Fix common JSON formatting issues
         cleaned = cleaned.replaceAll("\\n\\s*", " ");

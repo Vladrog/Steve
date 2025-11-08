@@ -12,6 +12,9 @@ public class SteveConfig {
     public static final ForgeConfigSpec.IntValue ACTION_TICK_DELAY;
     public static final ForgeConfigSpec.BooleanValue ENABLE_CHAT_RESPONSES;
     public static final ForgeConfigSpec.IntValue MAX_ACTIVE_STEVES;
+    public static final ForgeConfigSpec.ConfigValue<String> LMSTUDIO_API_URL;
+    public static final ForgeConfigSpec.ConfigValue<String> LMSTUDIO_MODEL;
+    public static final ForgeConfigSpec.ConfigValue<String> LMSTUDIO_API_KEY;
 
     static {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
@@ -19,7 +22,7 @@ public class SteveConfig {
         builder.comment("AI API Configuration").push("ai");
         
         AI_PROVIDER = builder
-            .comment("AI provider to use: 'groq' (FASTEST, FREE), 'openai', or 'gemini'")
+            .comment("AI provider to use: 'groq' (FASTEST, FREE), 'openai', 'gemini', or 'lmstudio' (local)")
             .define("provider", "groq");
         
         builder.pop();
@@ -41,6 +44,22 @@ public class SteveConfig {
         TEMPERATURE = builder
             .comment("Temperature for AI responses (0.0-2.0, lower is more deterministic)")
             .defineInRange("temperature", 0.7, 0.0, 2.0);
+        
+        builder.pop();
+
+        builder.comment("LM Studio Local API Configuration").push("lmstudio");
+        
+        LMSTUDIO_API_URL = builder
+            .comment("LM Studio API URL (default: http://localhost:1234/v1/chat/completions)")
+            .define("apiUrl", "http://localhost:1234/v1/chat/completions");
+        
+        LMSTUDIO_MODEL = builder
+            .comment("Model name as shown in LM Studio (e.g., 'llama-3.2-3b-instruct', 'mistral-7b-instruct')")
+            .define("model", "");
+        
+        LMSTUDIO_API_KEY = builder
+            .comment("API key for LM Studio (optional, usually not required for local usage)")
+            .define("apiKey", "");
         
         builder.pop();
 

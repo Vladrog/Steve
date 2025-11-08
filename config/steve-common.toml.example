@@ -1,16 +1,23 @@
-[openai]
-    # Your OpenAI API key
-    # Get your API key from: https://platform.openai.com/api-keys
-    apiKey = "your-openai-api-key-here"
+[ai]
+    # AI provider to use: 'groq' (FASTEST, FREE), 'openai', 'gemini', or 'lmstudio' (local)
+    provider = "lmstudio"
+
+[lmstudio]
+    # LM Studio Local API Configuration
+    # Make sure LM Studio is running and the server is started before using this provider
     
-    # Using GPT-3.5-turbo (much cheaper than GPT-4 for testing)
-    model = "gpt-3.5-turbo"
+    # API URL (default: http://localhost:1234/v1/chat/completions)
+    # You can change the port if you configured LM Studio differently
+    apiUrl = "http://127.0.0.1:1234/v1/chat/completions"
     
-    # Maximum tokens per API request
-    maxTokens = 1000
+    # Model name as shown in LM Studio
+    # Leave empty to use the currently loaded model in LM Studio
+    # Examples: "llama-3.2-3b-instruct", "mistral-7b-instruct", "phi-3-mini"
+    model = "qwen3-8b"
     
-    # Temperature (0.0-2.0, lower is more deterministic)
-    temperature = 0.7
+    # API key (optional, usually not required for local usage)
+    # Some LM Studio configurations may require this
+    apiKey = ""
 
 [behavior]
     # Ticks between action checks (20 ticks = 1 second)

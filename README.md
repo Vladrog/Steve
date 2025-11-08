@@ -46,7 +46,7 @@ The coordination happens server-side through a manager that tracks active builds
 **You need:**
 - Minecraft 1.20.1 with Forge
 - Java 17
-- An OpenAI API key (or Groq/Gemini if you prefer)
+- An OpenAI API key (or Groq/Gemini if you prefer), OR LM Studio for local models
 
 **Installation:**
 1. Download the JAR from releases
@@ -57,12 +57,33 @@ The coordination happens server-side through a manager that tracks active builds
 
 Config looks like this:
 ```toml
+[ai]
+provider = "openai"  # or "groq", "gemini", "lmstudio"
+
 [openai]
 apiKey = "your-api-key-here"
 model = "gpt-3.5-turbo"
 maxTokens = 1000
 temperature = 0.7
 ```
+
+For local models with LM Studio:
+```toml
+[ai]
+provider = "lmstudio"
+
+[lmstudio]
+apiUrl = "http://localhost:1234/v1/chat/completions"
+model = "llama-3.2-3b-instruct"  # Model name as shown in LM Studio
+apiKey = ""  # Usually not required for local usage
+```
+
+**Using LM Studio:**
+1. Download and install [LM Studio](https://lmstudio.ai/)
+2. Load a model in LM Studio
+3. Start the local server (usually on port 1234)
+4. Set `provider = "lmstudio"` in your config
+5. Set the `model` name to match what's shown in LM Studio (or leave empty to use the currently loaded model)
 
 Then just spawn a Steve with `/steve spawn Bob` and press K to start using them.
 
@@ -71,7 +92,7 @@ Then just spawn a Steve with `/steve spawn Bob` and press K to start using them.
 **Tech Stack:**
 - Minecraft Forge 47.2.0 for the modding framework
 - Java 17
-- Groq API for the agent reasoning (pluggable, also supports OpenAI and Gemini)
+- Groq API for the agent reasoning (pluggable, also supports OpenAI, Gemini, and LM Studio for local models)
 - Standard Minecraft pathfinding for movement
 - Langchain
 
