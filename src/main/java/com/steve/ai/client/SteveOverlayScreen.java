@@ -27,8 +27,17 @@ public class SteveOverlayScreen extends Screen {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        // K key to close
-        if (keyCode == 75 && !hasShiftDown() && !hasControlDown() && !hasAltDown()) { // K
+        // ESC key to close (более интуитивно)
+        if (keyCode == 256) { // ESC
+            SteveGUI.toggle();
+            if (minecraft != null) {
+                minecraft.setScreen(null);
+            }
+            return true;
+        }
+        
+        // F9 key to close (альтернатива)
+        if (keyCode == 298) { // F9
             SteveGUI.toggle();
             if (minecraft != null) {
                 minecraft.setScreen(null);

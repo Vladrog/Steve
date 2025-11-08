@@ -21,10 +21,11 @@ public class KeyBindings {
         TOGGLE_GUI = new KeyMapping(
             "key.steve.toggle_gui",
             InputConstants.Type.KEYSYM,
-            GLFW.GLFW_KEY_K, // K key
+            GLFW.GLFW_KEY_F9, // F9 key - не конфликтует с вводом текста
             KEY_CATEGORY
         );
         
-        event.register(TOGGLE_GUI);    }
+        event.register(TOGGLE_GUI);
+    }
 }
 
