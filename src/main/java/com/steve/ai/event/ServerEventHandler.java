@@ -1,12 +1,8 @@
 package com.steve.ai.event;
 
 import com.steve.ai.SteveMod;
-import com.steve.ai.entity.SteveEntity;
-import com.steve.ai.entity.SteveManager;
 import com.steve.ai.memory.StructureRegistry;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
@@ -17,22 +13,26 @@ public class ServerEventHandler {
 
     @SubscribeEvent
     public static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
-        if (event.getEntity() instanceof ServerPlayer player) {
-            ServerLevel level = (ServerLevel) player.level();
-            SteveManager manager = SteveMod.getSteveManager();
-            if (!stevesSpawned) {                manager.clearAllSteves();
-                
+        if (event.getEntity() instanceof ServerPlayer) {
+            if (!stevesSpawned) {
                 // Clear structure registry for fresh spatial awareness
                 StructureRegistry.clear();
                 
-                // Then, remove ALL SteveEntity instances from the world (including ones loaded from NBT)
-                int removedCount = 0;
+                // Убрано автоматическое создание Стивов - теперь они создаются только через команду /steve spawn
+                // Если нужно автоматически создавать Стивов, раскомментируйте код ниже:
+                /*
+                ServerLevel level = (ServerLevel) player.level();
+                SteveManager manager = SteveMod.getSteveManager();
+                manager.clearAllSteves();
+                
+                // Remove ALL SteveEntity instances from the world (including ones loaded from NBT)
                 for (var entity : level.getAllEntities()) {
                     if (entity instanceof SteveEntity) {
                         entity.discard();
-                        removedCount++;
                     }
-                }                Vec3 playerPos = player.position();
+                }
+                
+                Vec3 playerPos = player.position();
                 Vec3 lookVec = player.getLookAngle();
                 
                 String[] names = {"Steve", "Alex", "Bob", "Charlie"};
@@ -47,11 +47,12 @@ public class ServerEventHandler {
                         playerPos.z + offsetZ
                     );
                     
-                    SteveEntity steve = manager.spawnSteve(level, spawnPos, names[i]);
-                    if (steve != null) {                    }
+                    manager.spawnSteve(level, spawnPos, names[i]);
                 }
+                */
                 
-                stevesSpawned = true;            }
+                stevesSpawned = true;
+            }
         }
     }
 
